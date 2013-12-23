@@ -4,6 +4,7 @@ go:
   - 1.2
 
 script:
+  - for p in $(go list ./...); do gofmt -w -r "\"$(echo ${p} | sed -e 's/nabeken/crowdmob/')\" -> \"${p}\"" .; done
   - go test -v ./aws/
   - go test -v ./cloudwatch/
   - go test -v ./dynamodb/
