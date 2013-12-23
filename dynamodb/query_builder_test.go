@@ -2,7 +2,6 @@ package dynamodb_test
 
 import (
 	simplejson "github.com/bitly/go-simplejson"
-	"github.com/crowdmob/goamz/aws"
 	"github.com/crowdmob/goamz/dynamodb"
 	"reflect"
 	"testing"
@@ -20,17 +19,15 @@ func TestEmptyQuery(t *testing.T) {
 }
 
 func TestAddWriteRequestItems(t *testing.T) {
-	auth := &aws.Auth{AccessKey: "", SecretKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}
-	server := dynamodb.Server{*auth, aws.USEast}
 	primary := dynamodb.NewStringAttribute("WidgetFoo", "")
 	secondary := dynamodb.NewNumericAttribute("Created", "")
 	key := dynamodb.PrimaryKey{primary, secondary}
-	table := server.NewTable("FooData", key)
+	table := dummy_server.NewTable("FooData", key)
 
 	primary2 := dynamodb.NewStringAttribute("TestHashKey", "")
 	secondary2 := dynamodb.NewNumericAttribute("TestRangeKey", "")
 	key2 := dynamodb.PrimaryKey{primary2, secondary2}
-	table2 := server.NewTable("TestTable", key2)
+	table2 := dummy_server.NewTable("TestTable", key2)
 
 	q := dynamodb.NewEmptyQuery()
 
@@ -73,11 +70,9 @@ func TestAddWriteRequestItems(t *testing.T) {
 }
 
 func TestGetItemQuery(t *testing.T) {
-	auth := &aws.Auth{AccessKey: "", SecretKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}
-	server := dynamodb.Server{*auth, aws.USEast}
 	primary := dynamodb.NewStringAttribute("domain", "")
 	key := dynamodb.PrimaryKey{primary, nil}
-	table := server.NewTable("sites", key)
+	table := dummy_server.NewTable("sites", key)
 
 	q := dynamodb.NewQuery(table)
 	q.AddKey(table, &dynamodb.Key{HashKey: "test"})
@@ -121,12 +116,10 @@ func TestGetItemQuery(t *testing.T) {
 }
 
 func TestUpdateQuery(t *testing.T) {
-	auth := &aws.Auth{AccessKey: "", SecretKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}
-	server := dynamodb.Server{*auth, aws.USEast}
 	primary := dynamodb.NewStringAttribute("domain", "")
 	rangek := dynamodb.NewNumericAttribute("time", "")
 	key := dynamodb.PrimaryKey{primary, rangek}
-	table := server.NewTable("sites", key)
+	table := dummy_server.NewTable("sites", key)
 
 	countAttribute := dynamodb.NewNumericAttribute("count", "4")
 	attributes := []dynamodb.Attribute{*countAttribute}
@@ -171,11 +164,9 @@ func TestUpdateQuery(t *testing.T) {
 }
 
 func TestAddUpdates(t *testing.T) {
-	auth := &aws.Auth{AccessKey: "", SecretKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}
-	server := dynamodb.Server{*auth, aws.USEast}
 	primary := dynamodb.NewStringAttribute("domain", "")
 	key := dynamodb.PrimaryKey{primary, nil}
-	table := server.NewTable("sites", key)
+	table := dummy_server.NewTable("sites", key)
 
 	q := dynamodb.NewQuery(table)
 	q.AddKey(table, &dynamodb.Key{HashKey: "test"})
@@ -231,11 +222,9 @@ func TestAddUpdates(t *testing.T) {
 }
 
 func TestAddKeyConditions(t *testing.T) {
-	auth := &aws.Auth{AccessKey: "", SecretKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"}
-	server := dynamodb.Server{*auth, aws.USEast}
 	primary := dynamodb.NewStringAttribute("domain", "")
 	key := dynamodb.PrimaryKey{primary, nil}
-	table := server.NewTable("sites", key)
+	table := dummy_server.NewTable("sites", key)
 
 	q := dynamodb.NewQuery(table)
 	acs := []dynamodb.AttributeComparison{
