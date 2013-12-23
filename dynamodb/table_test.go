@@ -2,148 +2,145 @@ package dynamodb_test
 
 import (
 	"flag"
-	"fmt"
-	"github.com/crowdmob/goamz/aws"
 	"github.com/crowdmob/goamz/dynamodb"
+	"reflect"
 	"testing"
 )
 
-var amazon = flag.Bool("amazon", false, "Enable tests against amazon server")
+var local = flag.Bool("local", false, "Enable tests against DynamoDB local")
 
-func TestListTables(t *testing.T) {
-	if !*amazon {
-		t.Log("Amazon tests not enabled")
-		return
+func skipIfDisable(t *testing.T) {
+	if !*local {
+		t.Skip("DynamoDB local tests not enabled")
 	}
-
-	auth, err := aws.EnvAuth()
-
-	if err != nil {
-		t.Log(err)
-		t.FailNow()
-	}
-
-	server := dynamodb.Server{auth, aws.USEast}
-
-	tables, err := server.ListTables()
-
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	if len(tables) == 0 {
-		t.Log("Expected table to be returned")
-		t.FailNow()
-	}
-
-	fmt.Printf("tables %s\n", tables)
-
 }
 
 func TestCreateTable(t *testing.T) {
-	if !*amazon {
-		t.Log("Amazon tests not enabled")
-		return
+	skipIfDisable(t)
+	if err := initializeTable(); err != nil {
+		t.Fatal(err)
 	}
 
-	auth, err := aws.EnvAuth()
-
+	status, err := dummy_server.CreateTable(dummy_tdesc)
 	if err != nil {
-		t.Log(err)
-		t.FailNow()
+		t.Fatal(err)
+	}
+	if status != "ACTIVE" && status != "CREATING" {
+		t.Fatal("Expect status to be ACTIVE or CREATING")
+	}
+}
+
+func TestListTables(t *testing.T) {
+	skipIfDisable(t)
+	if err := initializeAndCreateTable(); err != nil {
+		t.Fatal(err)
 	}
 
-	server := dynamodb.Server{auth, aws.USEast}
-
-	attr1 := dynamodb.AttributeDefinitionT{"TestHashKey", "S"}
-	attr2 := dynamodb.AttributeDefinitionT{"TestRangeKey", "N"}
-
-	tableName := "MyTestTable"
-
-	keySch1 := dynamodb.KeySchemaT{"TestHashKey", "HASH"}
-	keySch2 := dynamodb.KeySchemaT{"TestRangeKey", "RANGE"}
-
-	provTPut := dynamodb.ProvisionedThroughputT{ReadCapacityUnits: 1, WriteCapacityUnits: 1}
-
-	tdesc := dynamodb.TableDescriptionT{
-		AttributeDefinitions:  []dynamodb.AttributeDefinitionT{attr1, attr2},
-		TableName:             tableName,
-		KeySchema:             []dynamodb.KeySchemaT{keySch1, keySch2},
-		ProvisionedThroughput: provTPut,
-	}
-
-	status, err := server.CreateTable(tdesc)
-
+	tables, err := dummy_server.ListTables()
 	if err != nil {
-		t.Error(err.Error())
-		t.FailNow()
+		t.Fatal(err)
 	}
 
-	fmt.Println(status)
+	if len(tables) != 1 {
+		t.Fatal("Expected table to be returned")
+	}
+	for _, tb := range tables {
+		if tb != "DynamoDBTestMyTable" {
+			t.Fatal("Expect table is DynamoDBTestMyTable")
+		}
+	}
+}
 
+func TestPutItem(t *testing.T) {
+	skipIfDisable(t)
+	if err := initializeAndCreateTable(); err != nil {
+		t.Fatal(err)
+	}
+
+	attrs := []dynamodb.Attribute{
+		*dynamodb.NewStringAttribute("Attr1", "ATTR1VAL"),
+	}
+	if ok, err := dummy_table.PutItem("NewHashKey", "1", attrs); !ok {
+		t.Fatal(err)
+	}
 }
 
 func TestGetItem(t *testing.T) {
-	if !*amazon {
-		t.Log("Amazon tests not enabled")
-		return
+	skipIfDisable(t)
+	initializeTable()
+
+	tdesc := dynamodb.TableDescriptionT{
+		TableName: dummy_tname,
+		AttributeDefinitions: []dynamodb.AttributeDefinitionT{
+			dynamodb.AttributeDefinitionT{"TestHashKey", "S"},
+		},
+		KeySchema: []dynamodb.KeySchemaT{
+			dynamodb.KeySchemaT{"TestHashKey", "HASH"},
+		},
+		ProvisionedThroughput: dynamodb.ProvisionedThroughputT{
+			ReadCapacityUnits: 1,
+			WriteCapacityUnits: 1,
+		},
+	}
+	if _, err := dummy_server.CreateTable(tdesc); err != nil {
+		t.Fatal(err)
 	}
 
-	auth, err := aws.EnvAuth()
+	primary := dynamodb.NewStringAttribute("TestHashKey", "")
+	pk := dynamodb.PrimaryKey{primary, nil}
+	table := dummy_server.NewTable(dummy_tname, pk)
 
+	// Put
+	attrs := []dynamodb.Attribute{
+		*dynamodb.NewStringAttribute("Attr1", "ATTR1VAL"),
+	}
+	if ok, err := table.PutItem("NewHashKey", "", attrs); !ok {
+		t.Fatal(err)
+	}
+
+	item, err := table.GetItem(&dynamodb.Key{HashKey: "NewHashKey"})
 	if err != nil {
-		t.Log(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 
-	server := dynamodb.Server{auth, aws.USEast}
-	primary := dynamodb.NewStringAttribute("domain", "")
-	key := dynamodb.PrimaryKey{primary, nil}
-	table := server.NewTable("production_storyarc-accelerator-sites",
-		key)
-
-	item, err := table.GetItem(&dynamodb.Key{HashKey: "ac-news.speedup.storytellerhq.com"})
-
-	if err != nil {
-		t.Log(err)
-		t.FailNow()
+	expected := map[string]*dynamodb.Attribute{
+		"TestHashKey":  dynamodb.NewStringAttribute("TestHashKey", "NewHashKey"),
+		"Attr1":        dynamodb.NewStringAttribute("Attr1", "ATTR1VAL"),
 	}
-
-	fmt.Printf("Item : %s\n", item)
-
+	if !reflect.DeepEqual(expected, item) {
+		t.Fatalf("Expect an item to be deeply equal. expected: %v, actual: %v", expected, item)
+	}
 }
 
 func TestGetItemRange(t *testing.T) {
-	if !*amazon {
-		return
+	skipIfDisable(t)
+	if err := initializeAndCreateTable(); err != nil {
+		t.Fatal(err)
 	}
 
-	if !*amazon {
-		t.Log("Amazon tests not enabled")
-		return
+	// Put
+	attrs := []dynamodb.Attribute{
+		*dynamodb.NewStringAttribute("Attr1", "ATTR1VAL"),
+	}
+	if ok, err := dummy_table.PutItem("NewHashKey", "1", attrs); !ok {
+		t.Fatal(err)
 	}
 
-	auth, err := aws.EnvAuth()
-
+	pk := &dynamodb.Key{
+		HashKey:  "NewHashKey",
+		RangeKey: "1",
+	}
+	item, err := dummy_table.GetItem(pk)
 	if err != nil {
-		t.Log(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 
-	server := dynamodb.Server{auth, aws.USEast}
-	primary := dynamodb.NewStringAttribute("uuid_type", "")
-	rangeK := dynamodb.NewNumericAttribute("time", "")
-	key := dynamodb.PrimaryKey{primary, rangeK}
-	table := server.NewTable("production_storyarc-accelerator-analytics",
-		key)
-
-	item, err := table.GetItem(&dynamodb.Key{HashKey: "aee5df14-6961-4baa-bad1-a1150576594f_MISSES", RangeKey: "1348187524"})
-
-	if err != nil {
-		t.Log(err)
-		t.FailNow()
+	expected := map[string]*dynamodb.Attribute{
+		"TestHashKey":  dynamodb.NewStringAttribute("TestHashKey", "NewHashKey"),
+		"TestRangeKey": dynamodb.NewNumericAttribute("TestRangeKey", "1"),
+		"Attr1":        dynamodb.NewStringAttribute("Attr1", "ATTR1VAL"),
 	}
-
-	fmt.Printf("Item : %s\n", item)
-
+	if !reflect.DeepEqual(expected, item) {
+		t.Fatalf("Expect an item to be deeply equal. expected: %v, actual: %v", expected, item)
+	}
 }
